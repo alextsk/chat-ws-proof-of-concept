@@ -1,0 +1,6 @@
+#!/bin/bash
+
+./build
+cd dist/
+npx static-server -p 9999 -o -z & npx static-server -p 9990 -o -z
+
