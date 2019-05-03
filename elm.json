@@ -7,6 +7,7 @@
     "dependencies": {
         "direct": {
             "Janiczek/cmd-extra": "1.1.0",
+            "billstclair/elm-localstorage": "7.2.0",
             "billstclair/elm-port-funnel": "1.2.0",
             "billstclair/elm-websocket-client": "4.1.0",
             "elm/browser": "1.0.1",
@@ -19,7 +20,9 @@
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2",
-            "elm-community/list-extra": "8.2.0"
+            "elm-community/dict-extra": "2.4.0",
+            "elm-community/list-extra": "8.2.0",
+            "pzp1997/assoc-list": "1.0.0"
         }
     },
     "test-dependencies": {

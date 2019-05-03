@@ -9,9 +9,15 @@ import Dict exposing (Dict)
 import Html exposing (Html, a, button, div, h1, input, p, span, text)
 import Html.Attributes exposing (checked, disabled, href, size, style, type_, value)
 import Html.Events exposing (onClick, onInput)
-import Json.Encode exposing (Value)
-import Json.Decode exposing (Decoder, field, map2, list, string, decodeString, Error)
+import Json.Encode as JE exposing (Value)
+import Json.Decode as JD exposing (Decoder, field, map2, list, string, Error)
 import PortFunnel.WebSocket as WebSocket exposing (Response(..))
+import PortFunnel.LocalStorage as LocalStorage
+    exposing
+        ( Key
+        , Message
+        , Response(..)
+        )
 import PortFunnels exposing (FunnelDict, Handler(..), State)
 
 
@@ -41,6 +47,7 @@ messageDecoder =
 handlers : List (Handler Model Msg)
 handlers =
     [ WebSocketHandler socketHandler
+    , LocalStorageHandler storageHandler
     ]
 
 
@@ -86,6 +93,11 @@ type alias Model =
     , state : State
     , key : String
     , error : Maybe String
+    , keyLs : Key
+    , value : String
+    , label : String
+    , returnLabel : String
+    , keysString : String
     }
 
 
@@ -97,6 +109,9 @@ main =
         , subscriptions = subscriptions
         }
 
+prefix : String
+prefix =
+    "example"
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -105,9 +120,14 @@ init _ =
     , messages = []
     , url = defaultUrl
     , wasLoaded = False
-    , state = PortFunnels.initialState
+    , state = PortFunnels.initialState prefix
     , key = "socket"
     , error = Nothing
+    , keyLs = "key"
+    , value = ""
+    , label = ""
+    , returnLabel = ""
+    , keysString = ""
     }
         |> withNoCmd
 
@@ -122,6 +142,8 @@ type Msg
     | Connect
     | Close
     | Send
+    | SetUrl
+    | GetUrl
     | Process Value
 
 
@@ -130,6 +152,18 @@ update msg model =
     case msg of
         UpdateSend newsend ->
             { model | send = newsend } |> withNoCmd
+        SetUrl ->
+          model |> withCmd
+              (sendLs
+                (LocalStorage.put "url"
+                    (Just <| JE.string model.url)
+                )
+                model
+              )
+
+        GetUrl -> 
+          let message = LocalStorage.get "url" in
+          model |> withCmd (sendLs message model)
 
         UpdateUrl url ->
             { model | url = url } |> withNoCmd
@@ -145,10 +179,6 @@ update msg model =
                     )
 
         Send -> model
-            -- { model
-            --     | log =
-            --         ("Sending \"" ++ model.send ++ "\"") :: model.log
-            -- }
                 |> withCmd
                     (WebSocket.makeSend model.key model.send
                         |> send model
@@ -179,6 +209,12 @@ send model message =
     WebSocket.send (getCmdPort WebSocket.moduleName model) message
 
 
+sendLs : LocalStorage.Message -> Model -> Cmd Msg
+sendLs message model =
+    LocalStorage.send (getCmdPort LocalStorage.moduleName model)
+        message
+        model.state.storage
+
 doIsLoaded : Model -> Model
 doIsLoaded model =
     if not model.wasLoaded && WebSocket.isLoaded model.state.websocket then
@@ -188,11 +224,45 @@ doIsLoaded model =
 
     else
         model
+
+
+storageHandler : LocalStorage.Response -> PortFunnels.State -> Model -> ( Model, Cmd Msg )
+storageHandler response state mdl =
+    let
+        model =
+            doIsLoaded
+                { mdl | state = state }
+    in
+    case response of
+        LocalStorage.GetResponse { label, key, value } ->
+            let
+                string =
+                    case value of
+                        Nothing ->
+                            "<null>"
+
+                        Just v ->
+                            decodeString v
+            in
+            { model | url = string } |> withNoCmd
+
+        _ ->
+            model |> withNoCmd
+
+decodeString : Value -> String
+decodeString value =
+    case JD.decodeValue JD.string value of
+        Ok res ->
+            res
+
+        Err err ->
+            JD.errorToString err
+
 defaultMessage: List Message
 defaultMessage =  
   [{ message = "no luck", origin = "server"}]
  
-socketHandler : Response -> State -> Model -> ( Model, Cmd Msg )
+socketHandler : WebSocket.Response -> State -> Model -> ( Model, Cmd Msg )
 socketHandler response state mdl =
     let
         model =
@@ -204,7 +274,7 @@ socketHandler response state mdl =
     in
     case response of
         WebSocket.MessageReceivedResponse { message } ->
-            { model | messages = (decodeString (list messageDecoder) message) |> Result.withDefault defaultMessage   }
+            { model | messages = (JD.decodeString (list messageDecoder) message) |> Result.withDefault defaultMessage   }
                 |> withNoCmd
 
         WebSocket.ConnectedResponse r ->
@@ -235,6 +305,18 @@ socketHandler response state mdl =
                 list ->
                     { model | log = Debug.toString list :: model.log }
                         |> withNoCmd
+                        
+stringListToString : List String -> String
+stringListToString list =
+    let
+        quoted =
+            List.map (\s -> "\"" ++ s ++ "\"") list
+
+        commas =
+            List.intersperse ", " quoted
+                |> String.concat
+    in
+    "[" ++ commas ++ "]"
 
 
 closedString : WebSocket.ClosedCode -> Bool -> Bool -> String
@@ -307,7 +389,8 @@ view model =
               else
                 button [ onClick Connect ]
                     [ text "Connect" ]
-            , br
+            , button [onClick SetUrl] [text "Save Url"]
+            , button [onClick GetUrl] [text "Restore Url"]
             ]
         , p [] <|
             List.concat
