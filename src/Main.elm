@@ -1,8 +1,5 @@
 port module Main exposing (main)
 
-{-| WebSocketClient Example
--}
-
 import Browser
 import Cmd.Extra exposing (addCmd, addCmds, withCmd, withCmds, withNoCmd)
 import Dict exposing (Dict)
@@ -371,7 +368,7 @@ view model =
         , style "padding" "1em"
         , style "border" "solid"
         ]
-        [ h1 [] [ text "PortFunnel.WebSocket Example" ]
+        [ h1 [] [ text "WebSocket and LocalStorage via PortFunnel" ]
         , p []
             [ b "url: "
             , input
